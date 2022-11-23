@@ -223,7 +223,8 @@ static float   fftResultMax[NUM_GEQ_CHANNELS] = {0.0f};               // A table
 /* Load audio analysis core */
 /* ************************ */
 #ifdef SR_USE_STANDARD
-#include "audio_core_Standard.h"
+//#include "audio_core_Standard.h"   // for regression testing
+#include "audio_core_StandardPlus.h" // overlapping (half-slide) FFT
 #else
   #ifdef SR_USE_MEGA
   #include "audio_core_MEGA.h"

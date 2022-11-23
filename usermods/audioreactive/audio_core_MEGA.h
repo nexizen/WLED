@@ -2,7 +2,7 @@
 
 // "MEGA" audio processing core:
 // -- 22Khz
-// -- overlaping (double-silde) FFT with 1024 samples
+// -- overlaping (half-silde) FFT with 1024 samples
 // -- 32 GEQ channels
 // -- (to be added) "beatroot" beat detection based on FFT
 // -- for ESP32, ESP32-S3

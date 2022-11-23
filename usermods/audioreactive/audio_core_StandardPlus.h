@@ -1,12 +1,12 @@
 #pragma once
 
-// "tiny" audio processing core:
-// -- (tbc) 14Khz - maybe we can still use 22kHz
-// -- single-silde FFT with 512 samples
-// -- FFT is skipped every second time, and results are interpolated instead (to reduce FFT workload)
+// Standard audio processing core:
+// -- 22Khz 
+// -- overlaping (half-silde) FFT with 512 samples
 // -- 16 GEQ channels
 // -- simple beat detection
-// -- for any ESP32, including ESP32-S2 and ESSP32-C3
+// -- for ESP32, ESP32-S3
+// -- not recommended for ESP32-S2, ESSP32-C3 or slower
 
 #ifdef HAVE_AUDIO_CORE
 #error please include only one audio core when compiling
@@ -14,7 +14,7 @@
 
 #define HAVE_AUDIO_CORE
 
-// Currently this is a copy of audio_core_Standard.h
+// WORK IN PROGRESS !!
 
 
 // audio source parameters and constant
@@ -22,7 +22,8 @@ constexpr SRate_t SAMPLE_RATE = 22050;        // Base sample rate in Hz - 22Khz 
 //constexpr SRate_t SAMPLE_RATE = 16000;        // 16kHz - use if FFTtask takes more than 20ms. Physical sample time -> 32ms
 //constexpr SRate_t SAMPLE_RATE = 20480;        // Base sample rate in Hz - 20Khz is experimental.    Physical sample time -> 25ms
 //constexpr SRate_t SAMPLE_RATE = 10240;        // Base sample rate in Hz - previous default.         Physical sample time -> 50ms
-#define FFT_MIN_CYCLE 21                      // minimum time before FFT task is repeated. Use with 22Khz sampling
+// we run two FFTs in 22ms
+#define FFT_MIN_CYCLE 10                      // minimum time before FFT task is repeated. Use with 22Khz sampling
 //#define FFT_MIN_CYCLE 30                      // Use with 16Khz sampling
 //#define FFT_MIN_CYCLE 23                      // minimum time before FFT task is repeated. Use with 20Khz sampling
 //#define FFT_MIN_CYCLE 46                      // minimum time before FFT task is repeated. Use with 10Khz sampling
@@ -58,6 +59,10 @@ static ArduinoFFT<float> FFT = ArduinoFFT<float>( vReal, vImag, samplesFFT, SAMP
 static arduinoFFT FFT = arduinoFFT(vReal, vImag, samplesFFT, SAMPLE_RATE);
 #endif
 
+// half-slide FFT re-uses 50% of prfevious samples
+static bool havePrevSamples = false;
+static float vRealPrev[samplesFFT_2] = { 0.0f };
+
 //
 // FFT main task
 //
@@ -73,8 +78,9 @@ void FFTcode(void * parameter)
     delay(1);           // DO NOT DELETE THIS LINE! It is needed to give the IDLE(0) task enough time and to keep the watchdog happy.
                         // taskYIELD(), yield(), vTaskDelay() and esp_task_wdt_feed() didn't seem to work.
 
-    // Don't run FFT computing code if we're in Receive mode or in realtime mode
-    if (disableSoundProcessing || (audioSyncEnabled & 0x02)) {
+    // Don't run FFT computing code if we're in Receive mode or in realtime mode, or audio not initialized
+    if (disableSoundProcessing || (audioSyncEnabled & 0x02) || (audioSource == nullptr)) {
+      havePrevSamples = false;                             // next round of samples starts fresh
       vTaskDelayUntil( &xLastWakeTime, xFrequency);        // release CPU, and let I2S fill its buffers
       continue;
     }
@@ -84,8 +90,17 @@ void FFTcode(void * parameter)
     bool haveDoneFFT = false; // indicates if second measurement (FFT time) is valid
 #endif
 
-    // get a fresh batch of samples from I2S
-    if (audioSource) audioSource->getSamples(vReal, samplesFFT);
+    bool usedPrevSamples = false;                                 // don't rerun filters if this is true
+    for (int sliceStart = 0; sliceStart < samplesFFT; sliceStart += samplesFFT_2) {
+      if ((sliceStart == 0) && havePrevSamples) {
+        memcpy(vReal, vRealPrev, sizeof(float) * samplesFFT_2);   // copy samples from backup
+        havePrevSamples = false;
+        usedPrevSamples = true;                                   // invalidate sample backup
+      } else {
+        // get a fresh batch of samples from I2S
+        audioSource->getSamples(vReal+sliceStart, samplesFFT_2);  // pull 50% fresh samples from I2S
+      }
+    }
 
 #if defined(WLED_DEBUG) || defined(SR_DEBUG)|| defined(SR_STATS)
     if (start < esp_timer_get_time()) { // filter out overflows
@@ -99,13 +114,19 @@ void FFTcode(void * parameter)
 
     // band pass filter - can reduce noise floor by a factor of 50
     // downside: frequencies below 100Hz will be ignored
-    if (useBandPassFilter) runMicFilter(samplesFFT, vReal);
+    if (useBandPassFilter) {
+      if (usedPrevSamples == false) runMicFilter(samplesFFT_2, vReal);  // filter first half of samples
+      runMicFilter(samplesFFT_2, vReal+samplesFFT_2);                   // filter second half of samples
+    }
+
+    // store second half of samples for next iteration
+    memcpy(vRealPrev, vReal+samplesFFT_2, sizeof(float) * samplesFFT_2);
+    havePrevSamples = true;
 
     // find highest sample in the batch
     float maxSample = 0.0f;                         // max sample from FFT batch
     for (int i=0; i < samplesFFT; i++) {
 	    // set imaginary parts to 0
-      vImag[i] = 0;
 	    // pick our  our current mic sample - we take the max value from all samples that go into FFT
 	    if ((vReal[i] <= (INT16_MAX - 1024)) && (vReal[i] >= (INT16_MIN + 1024)))  //skip extreme values - normally these are artefacts
         if (fabsf((float)vReal[i]) > maxSample) maxSample = fabsf((float)vReal[i]);
@@ -118,7 +139,8 @@ void FFTcode(void * parameter)
     //if (fabsf(sampleAvg) > 0.25f) { // noise gate open
     if (fabsf(volumeSmth) > 0.25f) { // noise gate open
 
-      // run FFT (takes 3-5ms on ESP32, ~12ms on ESP32-S2)
+     // run FFT (takes 3-5ms on ESP32, ~12ms on ESP32-S2)
+     memset(vImag, 0, sizeof(float) * samplesFFT);                // zero imaginary parts
 #ifdef UM_AUDIOREACTIVE_USE_NEW_FFT
       FFT.dcRemoval();                                            // remove DC offset
       #if !defined(FFT_PREFER_EXACT_PEAKS)
@@ -286,4 +308,3 @@ static void detectSamplePeak(void) {
   }
 
 }
-
