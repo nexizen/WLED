@@ -7083,10 +7083,16 @@ static const char _data_FX_MODE_WATERFALL[] PROGMEM = "Waterfall@!,Adjust color,
 /////////////////////////
 //     ** 2D GEQ       //
 /////////////////////////
+#ifdef SR_USE_MEGA
+#define NUM_GEQ_CHANNELS 32
+#else
+#define NUM_GEQ_CHANNELS 16
+#endif
+
 uint16_t mode_2DGEQ(void) { // By Will Tatam. Code reduction by Ewoud Wijma.
   if (!strip.isMatrix) return mode_static(); // not a 2D set-up
 
-  const int NUM_BANDS = map(SEGMENT.custom1, 0, 255, 1, 16);
+  const int NUM_BANDS = map(SEGMENT.custom1, 0, 255, 1, NUM_GEQ_CHANNELS);
   const uint16_t cols = SEGMENT.virtualWidth();
   const uint16_t rows = SEGMENT.virtualHeight();
 
@@ -7114,9 +7120,9 @@ uint16_t mode_2DGEQ(void) { // By Will Tatam. Code reduction by Ewoud Wijma.
 
   for (int x=0; x < cols; x++) {
     uint8_t  band       = map(x, 0, cols-1, 0, NUM_BANDS - 1);
-    if (NUM_BANDS < 16) band = map(band, 0, NUM_BANDS - 1, 0, 15); // always use full range. comment out this line to get the previous behaviour.
-    band = constrain(band, 0, 15);
-    uint16_t colorIndex = band * 17;
+    if (NUM_BANDS < NUM_GEQ_CHANNELS) band = map(band, 0, NUM_BANDS - 1, 0, NUM_GEQ_CHANNELS-1); // always use full range. comment out this line to get the previous behaviour.
+    band = constrain(band, 0, NUM_GEQ_CHANNELS -1);
+    uint16_t colorIndex = band * (NUM_GEQ_CHANNELS+1);
     uint16_t barHeight  = map(fftResult[band], 0, 255, 0, rows); // do not subtract -1 from rows here
     if (barHeight > previousBarHeight[x]) previousBarHeight[x] = barHeight; //drive the peak up
 
@@ -7148,7 +7154,7 @@ uint16_t mode_2DFunkyPlank(void) {              // Written by ??? Adapted by Wil
   const uint16_t cols = SEGMENT.virtualWidth();
   const uint16_t rows = SEGMENT.virtualHeight();
 
-  int NUMB_BANDS = map(SEGMENT.custom1, 0, 255, 1, 16);
+  int NUMB_BANDS = map(SEGMENT.custom1, 0, 255, 1, NUM_GEQ_CHANNELS);
   int barWidth = (cols / NUMB_BANDS);
   int bandInc = 1;
   if (barWidth == 0) {
@@ -7176,8 +7182,8 @@ uint16_t mode_2DFunkyPlank(void) {              // Written by ??? Adapted by Wil
     // display values of
     int b = 0;
     for (int band = 0; band < NUMB_BANDS; band += bandInc, b++) {
-      int hue = fftResult[band % 16];
-      int v = map(fftResult[band % 16], 0, 255, 10, 255);
+      int hue = fftResult[band % NUM_GEQ_CHANNELS];
+      int v = map(fftResult[band % NUM_GEQ_CHANNELS], 0, 255, 10, 255);
       for (int w = 0; w < barWidth; w++) {
          int xpos = (barWidth * b) + w;
          SEGMENT.setPixelColorXY(xpos, 0, CHSV(hue, 255, v));
