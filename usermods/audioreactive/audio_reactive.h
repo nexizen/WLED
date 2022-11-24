@@ -20,7 +20,7 @@
  * ....
  */
 
-#define FFT_PREFER_EXACT_PEAKS  // use different FFT wndowing -> results in "sharper" peaks and less "leaking" into other frequencies
+#define FFT_PREFER_EXACT_PEAKS  // use different FFT windowing -> results in "sharper" peaks and less "leaking" into other frequencies
 //#define SR_STATS
 
 //#define SR_USE_MEGA
@@ -1387,6 +1387,7 @@ class AudioReactive : public Usermod {
         } else {
           infoArr.add(F("suspended"));
         }
+        infoArr.add(F(AUDIO_CORE_NAME));
 
         // AGC or manual Gain
         if ((soundAgc==0) && (disableSoundProcessing == false) && !(audioSyncEnabled & 0x02)) {

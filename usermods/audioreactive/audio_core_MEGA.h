@@ -13,6 +13,7 @@
 #endif
 
 #define HAVE_AUDIO_CORE
+#define AUDIO_CORE_NAME " (MEGA)"
 
 // WORK IN PROGRESS !!
 

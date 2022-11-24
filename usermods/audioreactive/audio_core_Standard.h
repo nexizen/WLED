@@ -13,6 +13,8 @@
 #endif
 
 #define HAVE_AUDIO_CORE
+#define AUDIO_CORE_NAME " (Std)"
+
 
 // audio source parameters and constant
 constexpr SRate_t SAMPLE_RATE = 22050;        // Base sample rate in Hz - 22Khz is a standard rate. Physical sample time -> 23ms

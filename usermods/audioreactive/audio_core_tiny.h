@@ -13,6 +13,7 @@
 #endif
 
 #define HAVE_AUDIO_CORE
+#define AUDIO_CORE_NAME " (tiny)"
 
 // Currently this is a copy of audio_core_Standard.h
 
