@@ -1,14 +1,17 @@
 #pragma once
 
 #include "wled.h"
+#include <string.h>
+#ifdef ARDUINO_ARCH_ESP32
 #include <driver/i2s.h>
 #include <driver/adc.h>
-
-#ifndef ARDUINO_ARCH_ESP32
-  #error This audio reactive usermod does not support the ESP8266.
 #endif
 
-#if defined(WLED_DEBUG) || defined(SR_DEBUG)
+#ifndef ARDUINO_ARCH_ESP32
+  #warning This audio reactive usermod does not support the ESP8266.
+#endif
+
+#if defined(ARDUINO_ARCH_ESP32) && defined(WLED_DEBUG) || defined(SR_DEBUG)
 #include <esp_timer.h>
 #endif
 
@@ -66,10 +69,20 @@
   #define PLOT_FLUSH()
 #endif
 
+#ifdef ARDUINO_ARCH_ESP32
 // use audio source class (ESP32 specific)
 #include "audio_source.h"
 constexpr i2s_port_t I2S_PORT = I2S_NUM_0;       // I2S port to use (do not change !)
 constexpr int BLOCK_SIZE = 128;                  // I2S buffer size (samples)
+#else
+// use dummy audiosource
+#define AudioSource void
+constexpr int BLOCK_SIZE = 128;                  // I2S buffer size (samples)
+#if !defined(I2S_PIN_NO_CHANGE)
+#define I2S_PIN_NO_CHANGE -1                     // -1 = no pin assigned
+#endif
+#define FFT_MIN_CYCLE 16                         // 16ms sampling time
+#endif
 
 // globals
 static uint8_t inputLevel = 128;              // UI slider value
@@ -93,12 +106,13 @@ static uint16_t attackTime = 50;              // int: attack time in millisecond
 static uint16_t decayTime = 300;              // int: decay time in milliseconds.  New default 300ms. Old default was 1.40sec
 // user settable options for FFTResult scaling
 static uint8_t FFTScalingMode = 3;            // 0 none; 1 optimized logarithmic; 2 optimized linear; 3 optimized sqare root
+#ifdef ARDUINO_ARCH_ESP32
 #ifndef SR_FREQ_PROF
   static uint8_t pinkIndex = 0;               // 0: default; 1: line-in; 2: IMNP441
 #else
   static uint8_t pinkIndex = SR_FREQ_PROF;    // 0: default; 1: line-in; 2: IMNP441
 #endif
-
+#endif
 
 // 
 // AGC presets
@@ -167,6 +181,7 @@ static void postProcessFFTResults(bool noiseGateOpen, int numberOfChannels); // 
 
 #define NUM_GEQ_CHANNELS 16                                           // number of frequency channels. Don't change !!
 
+#ifdef ARDUINO_ARCH_ESP32 // FFT analysis is not possible on 8266 (needs more horsepwowers than 8266 can offer)
 static TaskHandle_t FFT_Task = nullptr;
 
 // Table of multiplication factors so that we can even out the frequency response.
@@ -219,6 +234,7 @@ static const float fftResultPink[MAX_PINK+1][NUM_GEQ_CHANNELS] = {
    * Compile + upload
    * Test your new profile (same procedure as above). Iterate the process to improve results.
    */
+#endif // #ifdef ARDUINO_ARCH_ESP32
 
 // globals and FFT Output variables shared with animations
 static float FFT_MajorPeak = 1.0f;              // FFT: strongest (peak) frequency
@@ -229,6 +245,7 @@ static uint64_t fftTime = 0;
 static uint64_t sampleTime = 0;
 #endif
 
+#ifdef ARDUINO_ARCH_ESP32 // FFT analysis is not possible on 8266 (needs more horsepwowers than 8266 can offer)
 // FFT Task variables (filtering and post-processing)
 static float   fftCalc[NUM_GEQ_CHANNELS] = {0.0f};                    // Try and normalize fftBin values to a max of 4096, so that 4096/16 = 256.
 static float   fftAvg[NUM_GEQ_CHANNELS] = {0.0f};                     // Calculated frequency channel results, with smoothing (used if dynamics limiter is ON)
@@ -535,7 +552,7 @@ void FFTcode(void * parameter)
 
   } // for(;;)ever
 } // FFTcode() task end
-
+#endif // #ifdef ARDUINO_ARCH_ESP32
 
 ///////////////////////////
 // Pre / Postprocessing  //
@@ -572,6 +589,7 @@ static void runMicFilter(uint16_t numSamples, float *sampleBuffer)          // p
   }
 }
 
+#ifdef ARDUINO_ARCH_ESP32 // FFT analysis is not possible on 8266 (needs more horsepwowers than 8266 can offer)
 static void postProcessFFTResults(bool noiseGateOpen, int numberOfChannels) // post-processing and post-amp of GEQ channels
 {
     for (int i=0; i < numberOfChannels; i++) {
@@ -652,10 +670,13 @@ static void postProcessFFTResults(bool noiseGateOpen, int numberOfChannels) // p
       fftResult[i] = constrain((int)currentResult, 0, 255);
     }
 }
+#endif // #ifdef ARDUINO_ARCH_ESP32
+
 ////////////////////
 // Peak detection //
 ////////////////////
 
+#ifdef ARDUINO_ARCH_ESP32 // FFT analysis is not possible on 8266 (needs more horsepwowers than 8266 can offer)
 // peak detection is called from FFT task when vReal[] contains valid FFT results
 static void detectSamplePeak(void) {
   bool havePeak = false;
@@ -682,6 +703,7 @@ static void detectSamplePeak(void) {
     udpSamplePeak = true;
   }
 }
+#endif // #ifdef ARDUINO_ARCH_ESP32
 
 static void autoResetPeak(void) {
   uint16_t MinShowDelay = MAX(50, strip.getMinShowDelay());  // Fixes private class variable compiler error. Unsure if this is the correct way of fixing the root problem. -THATDONFC
@@ -1013,7 +1035,7 @@ class AudioReactive : public Usermod {
         // warning!! Absolutely experimental code. Audio on 8266 is still not working. Expects a million follow-on problems. 
         static unsigned long lastAnalogTime = 0;
         static float lastAnalogValue = 0.0f;
-        if (millis() - lastAnalogTime > 20) {
+        if (millis() - lastAnalogTime > FFT_MIN_CYCLE) {
             micDataReal = analogRead(A0); // read one sample with 10bit resolution. This is a dirty hack, supporting volumereactive effects only.
             lastAnalogTime = millis();
             lastAnalogValue = micDataReal;
@@ -1131,7 +1153,8 @@ class AudioReactive : public Usermod {
       //DEBUGSR_PRINTLN("Transmitting UDP Mic Packet");
 
       audioSyncPacket transmitData;
-      strncpy_P(transmitData.header, PSTR(UDP_SYNC_HEADER), 6);
+      //strncpy_P(transmitData.header, FPSTR(UDP_SYNC_HEADER), 6);
+      strncpy(transmitData.header, UDP_SYNC_HEADER, 6);
       // transmit samples that were not modified by limitSampleDynamics()
       transmitData.sampleRaw   = (soundAgc) ? rawSampleAgc: sampleRaw;
       transmitData.sampleSmth  = (soundAgc) ? sampleAgc   : sampleAvg;
@@ -1146,17 +1169,24 @@ class AudioReactive : public Usermod {
       transmitData.FFT_Magnitude = my_magnitude;
       transmitData.FFT_MajorPeak = FFT_MajorPeak;
 
-      fftUdp.beginMulticastPacket();
+#ifdef ARDUINO_ARCH_ESP32
+      fftUdp.beginMulticastPacket();  // !! note to self: check if more parameters needed (ttl??)
+#else
+      udpSyncConnected = (1 == fftUdp.beginPacketMulticast(IPAddress(239, 0, 0, 1), audioSyncPort, WiFi.localIP(), 2));
+#endif
+
       fftUdp.write(reinterpret_cast<uint8_t *>(&transmitData), sizeof(transmitData));
       fftUdp.endPacket();
       return;
     } // transmitAudioData()
 
     static bool isValidUdpSyncVersion(const char *header) {
-      return strncmp_P(header, PSTR(UDP_SYNC_HEADER), 6) == 0;
+      //return strncmp_P(header, FPSTR(UDP_SYNC_HEADER), 6) == 0;
+      return(strncmp(header, UDP_SYNC_HEADER, 6) == 0);
     }
     static bool isValidUdpSyncVersion_v1(const char *header) {
-      return strncmp_P(header, PSTR(UDP_SYNC_HEADER_v1), 6) == 0;
+      //return strncmp_P(header, FPSTR(UDP_SYNC_HEADER_v1), 6) == 0;
+      return(strncmp(header, UDP_SYNC_HEADER_v1, 6) == 0);
     }
 
     void decodeAudioData(int packetSize, uint8_t *fftBuff) {
@@ -1282,14 +1312,18 @@ class AudioReactive : public Usermod {
       }
 
       // Reset I2S peripheral for good measure
+      #ifdef ARDUINO_ARCH_ESP32 // not possible on 8266
       i2s_driver_uninstall(I2S_NUM_0);   // E (696) I2S: i2s_driver_uninstall(2006): I2S port 0 has not installed
       #if !defined(CONFIG_IDF_TARGET_ESP32C3)
         delay(100);
         periph_module_reset(PERIPH_I2S0_MODULE);   // not possible on -C3
       #endif
+      #endif
       delay(100);         // Give that poor microphone some time to setup.
 
       useBandPassFilter = false;
+
+      #ifdef ARDUINO_ARCH_ESP32 // not possible on 8266
       switch (dmType) {
       #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
         // stub cases for not-yet-supported I2S modes on other ESP32 chips
@@ -1363,7 +1397,10 @@ class AudioReactive : public Usermod {
       } else {
         USER_PRINTLN(F("AR: sound input driver initialized successfully."));        
       }
-
+#else // 8266 specific
+      if (!audioSource) enabled = false;                 // audio failed to initialise
+      if (enabled) disableSoundProcessing = false;       // all good - enable audio processing
+#endif
       if (enabled) connectUDPSoundSync();
       initDone = true;
     }
@@ -1381,7 +1418,7 @@ class AudioReactive : public Usermod {
       }
       
       if (audioSyncPort > 0 && (audioSyncEnabled & 0x03)) {
-      #ifndef ESP8266
+      #ifdef ARDUINO_ARCH_ESP32
         udpSyncConnected = fftUdp.beginMulticast(IPAddress(239, 0, 0, 1), audioSyncPort);
       #else
         udpSyncConnected = fftUdp.beginMulticast(WiFi.localIP(), IPAddress(239, 0, 0, 1), audioSyncPort);
@@ -1440,8 +1477,9 @@ class AudioReactive : public Usermod {
 
       if (audioSyncEnabled & 0x02) disableSoundProcessing = true;   // make sure everything is disabled IF in audio Receive mode
       if (audioSyncEnabled & 0x01) disableSoundProcessing = false;  // keep running audio IF we're in audio Transmit mode
+#ifdef ARDUINO_ARCH_ESP32
       if (!audioSource->isInitialized()) disableSoundProcessing = true;  // no audio source
-
+#endif
 
       // Only run the sampling code IF we're not in Receive mode or realtime mode
       if (!(audioSyncEnabled & 0x02) && !disableSoundProcessing) {
@@ -1549,14 +1587,17 @@ class AudioReactive : public Usermod {
       sampleRaw = 0; rawSampleAgc = 0;
       my_magnitude = 0; FFT_Magnitude = 0; FFT_MajorPeak = 1;
       multAgc = 1;
+      #ifdef ARDUINO_ARCH_ESP32 // not possible on 8266
       // reset FFT data
       memset(fftCalc, 0, sizeof(fftCalc)); 
       memset(fftAvg, 0, sizeof(fftAvg)); 
+      #endif
       memset(fftResult, 0, sizeof(fftResult)); 
       for(int i=(init?0:1); i<NUM_GEQ_CHANNELS; i+=2) fftResult[i] = 16; // make a tiny pattern
       inputLevel = 128;                                    // resset level slider to default
       autoResetPeak();
 
+      #ifdef ARDUINO_ARCH_ESP32 // not possible on 8266
       if (init && FFT_Task) {
         vTaskSuspend(FFT_Task);   // update is about to begin, disable task to prevent crash
         if (udpSyncConnected) {   // close UDP sync connection (if open)
@@ -1580,6 +1621,7 @@ class AudioReactive : public Usermod {
 //            , 0                                 // Core where the task should run
           );
       }
+      #endif // #ifdef ARDUINO_ARCH_ESP32
       micDataReal = 0.0f;                     // just to be sure
       if (enabled) disableSoundProcessing = false;
     }
@@ -1672,13 +1714,19 @@ class AudioReactive : public Usermod {
           }
         } else {
           // Analog or I2S digital input
+#ifdef ARDUINO_ARCH_ESP32 // not possible on 8266
           if (audioSource && (audioSource->isInitialized())) {
+#else
+          if (audioSource) {  // !! note to self - fix me
+#endif
+#ifdef ARDUINO_ARCH_ESP32
             // audio source sucessfully configured
-            if (audioSource->getType() == AudioSource::Type_I2SAdc) {
+            if (audioSource->getType() == AudioSource::Type_I2SAdc) {  // !! note to self: need a "switch"
               infoArr.add(F("ADC analog"));
             } else {
               infoArr.add(F("I2S digital"));
             }
+#endif
             // input level or "silence"
             if (maxSample5sec > 1.0) {
               float my_usage = 100.0f * (maxSample5sec / 255.0f);
@@ -1829,6 +1877,7 @@ class AudioReactive : public Usermod {
       JsonObject top = root.createNestedObject(FPSTR(_name));
       top[FPSTR(_enabled)] = enabled;
 
+#ifdef ARDUINO_ARCH_ESP32 // not possible on 8266
     #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
       JsonObject amic = top.createNestedObject(FPSTR(_analogmic));
       amic["pin"] = audioPin;
@@ -1843,6 +1892,7 @@ class AudioReactive : public Usermod {
       pinArray.add(mclkPin);
       pinArray.add(sdaPin);
       pinArray.add(sclPin);
+#endif // #ifdef ARDUINO_ARCH_ESP32
 
       JsonObject cfg = top.createNestedObject("config");
       cfg[F("squelch")] = soundSquelch;
@@ -1856,7 +1906,9 @@ class AudioReactive : public Usermod {
 
       JsonObject freqScale = top.createNestedObject("frequency");
       freqScale[F("scale")] = FFTScalingMode;
+#ifdef ARDUINO_ARCH_ESP32 // not possible on 8266
       freqScale[F("profile")] = pinkIndex; //WLEDMM
+#endif
 
       JsonObject sync = top.createNestedObject("sync");
       sync[F("port")] = audioSyncPort;
@@ -1886,7 +1938,7 @@ class AudioReactive : public Usermod {
 
       configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
 
-    #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
+    #if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
       configComplete &= getJsonValue(top[FPSTR(_analogmic)]["pin"], audioPin);
     #else
       audioPin = -1; // MCU does not support analog mic
@@ -1900,12 +1952,14 @@ class AudioReactive : public Usermod {
       #endif
     #endif
 
+#ifdef ARDUINO_ARCH_ESP32 // not possible on 8266
       configComplete &= getJsonValue(top[FPSTR(_digitalmic)]["pin"][0], i2ssdPin);
       configComplete &= getJsonValue(top[FPSTR(_digitalmic)]["pin"][1], i2swsPin);
       configComplete &= getJsonValue(top[FPSTR(_digitalmic)]["pin"][2], i2sckPin);
       configComplete &= getJsonValue(top[FPSTR(_digitalmic)]["pin"][3], mclkPin);
       configComplete &= getJsonValue(top[FPSTR(_digitalmic)]["pin"][4], sdaPin);
       configComplete &= getJsonValue(top[FPSTR(_digitalmic)]["pin"][5], sclPin);
+#endif
 
       configComplete &= getJsonValue(top["config"][F("squelch")], soundSquelch);
       configComplete &= getJsonValue(top["config"][F("gain")],    sampleGain);
@@ -1916,7 +1970,9 @@ class AudioReactive : public Usermod {
       configComplete &= getJsonValue(top["dynamics"][F("fall")],  decayTime);
 
       configComplete &= getJsonValue(top["frequency"][F("scale")], FFTScalingMode);
+#ifdef ARDUINO_ARCH_ESP32 // not possible on 8266
       configComplete &= getJsonValue(top["frequency"][F("profile")], pinkIndex);  //WLEDMM
+#endif
 
       configComplete &= getJsonValue(top["sync"][F("port")], audioSyncPort);
       configComplete &= getJsonValue(top["sync"][F("mode")], audioSyncEnabled);
@@ -1935,6 +1991,8 @@ class AudioReactive : public Usermod {
     #endif
 
       oappend(SET_F("dd=addDropdown('AudioReactive','digitalmic:type');"));
+
+#ifdef ARDUINO_ARCH_ESP32 // not possible on 8266
     #if  !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
     #if SR_DMTYPE==0
       oappend(SET_F("addOption(dd,'Generic Analog (⎌)',0);"));
@@ -1969,6 +2027,7 @@ class AudioReactive : public Usermod {
       oappend(SET_F("addOption(dd,'Generic I2S PDM',5);"));
     #endif
     #endif
+#endif // #ifdef ARDUINO_ARCH_ESP32
 
     #ifdef SR_SQUELCH
       oappend(SET_F("addInfo('AudioReactive:config:squelch',1,'<i>&#9100; ")); oappendi(SR_SQUELCH); oappend("</i>');");  // 0 is field type, 1 is actual field
@@ -1996,6 +2055,7 @@ class AudioReactive : public Usermod {
       oappend(SET_F("addOption(dd,'Square Root (Energy)',3);"));
       oappend(SET_F("addOption(dd,'Logarithmic (Loudness)',1);"));
 
+#ifdef ARDUINO_ARCH_ESP32 // not possible on 8266
       //WLEDMM add defaults
       oappend(SET_F("dd=addDropdown('AudioReactive','frequency:profile');"));
     #if SR_FREQ_PROF==0
@@ -2053,12 +2113,14 @@ class AudioReactive : public Usermod {
     #else
       oappend(SET_F("addOption(dd,'userdefined #2',9);"));
     #endif
+#endif
 
       oappend(SET_F("dd=addDropdown('AudioReactive','sync:mode');"));
       oappend(SET_F("addOption(dd,'Off',0);"));
       oappend(SET_F("addOption(dd,'Send',1);"));
       oappend(SET_F("addOption(dd,'Receive',2);"));
       oappend(SET_F("addInfo('AudioReactive:digitalmic:type',1,'<i>requires reboot!</i>');"));  // 0 is field type, 1 is actual field
+#ifdef ARDUINO_ARCH_ESP32 // not possible on 8266
       oappend(SET_F("addInfo('AudioReactive:digitalmic:pin[]',0,'<i>sd/data/dout</i>','I2S SD');"));
     #ifdef I2S_SDPIN
       oappend(SET_F("replaceOption('AudioReactive:digitalmic:pin[]',0,'")); oappendi(I2S_SDPIN); oappend(" ⎌',"); oappendi(I2S_SDPIN); oappend(");"); 
@@ -2082,6 +2144,7 @@ class AudioReactive : public Usermod {
       oappend(SET_F("replaceOption('AudioReactive:digitalmic:pin[]',4,'use global (")); oappendi(i2c_sda); oappend(")',-1);"); 
       oappend(SET_F("addInfo('AudioReactive:digitalmic:pin[]',5,'','I2C SCL');"));
       oappend(SET_F("replaceOption('AudioReactive:digitalmic:pin[]',5,'use global (")); oappendi(i2c_sda); oappend(")',-1);"); 
+#endif
     }
 
 

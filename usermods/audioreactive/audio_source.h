@@ -141,7 +141,7 @@ class AudioSource {
     virtual bool isInitialized(void) {return(_initialized);}
 
     /* identify Audiosource type - I2S-ADC or I2S-digital */
-    typedef enum{Type_unknown=0, Type_I2SAdc=1, Type_I2SDigital=2} AudioSourceType;
+    typedef enum{Type_unknown=0, Type_I2SAdc=1, Type_I2SDigital=2, Type_NetworkOnly=3, Type_AnalogRead=4} AudioSourceType;
     virtual AudioSourceType getType(void) {return(Type_I2SDigital);}               // default is "I2S digital source" - ADC type overrides this method
  
   protected:
