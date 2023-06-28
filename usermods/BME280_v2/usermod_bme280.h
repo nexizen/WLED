@@ -33,6 +33,7 @@ private:
   #ifdef ESP8266
     //uint8_t RST_PIN = 16; // Uncoment for Heltec WiFi-Kit-8
   #endif
+  int8_t ioPin[2] = {i2c_scl, i2c_sda};   // I2C pins: SCL, SDA...defaults to Arch hardware pins but overridden at setup() //WLEDMM
   bool initDone = false;
 
   // BME280 sensor settings
@@ -185,6 +186,7 @@ private:
 public:
   void setup()
   {
+    //WLEDMM
     bool HW_Pins_Used = (ioPin[0]==i2c_scl && ioPin[1]==i2c_sda); // note whether architecture-based hardware SCL/SDA pins used
     //PinOwner po = PinOwner::UM_BME280; // defaults to being pinowner for SCL/SDA pins  // WLEDMM not needed
     PinManagerPinType pins[2] = { { ioPin[0], true }, { ioPin[1], true } };  // allocate pins

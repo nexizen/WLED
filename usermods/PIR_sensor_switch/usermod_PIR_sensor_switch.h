@@ -160,13 +160,7 @@ public:
    */
   void addToConfig(JsonObject &root);
 
-  void appendConfigData()
-  {
-    oappend(SET_F("addHB('PIRsensorSwitch');"));
-
-    oappend(SET_F("addInfo('PIRsensorSwitch:HA-discovery',1,'HA=Home Assistant');"));     // 0 is field type, 1 is actual field
-    oappend(SET_F("addInfo('PIRsensorSwitch:notifications',1,'Periodic WS updates');"));  // 0 is field type, 1 is actual field
-  }
+  void appendConfigData();
 
   /**
    * restore the changeable values
@@ -487,6 +481,8 @@ void PIRsensorSwitch::addToConfig(JsonObject &root)
 
 void PIRsensorSwitch::appendConfigData()
 {
+  oappend(SET_F("addHB('PIRsensorSwitch');"));
+
   oappend(SET_F("addInfo('PIRsensorSwitch:HA-discovery',1,'HA=Home Assistant');"));     // 0 is field type, 1 is actual field
   oappend(SET_F("addInfo('PIRsensorSwitch:notifications',1,'Periodic WS updates');"));  // 0 is field type, 1 is actual field
   oappend(SET_F("addInfo('PIRsensorSwitch:override',1,'Cancel timer on change');"));    // 0 is field type, 1 is actual field
