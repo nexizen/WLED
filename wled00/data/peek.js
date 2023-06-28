@@ -10,23 +10,29 @@ function peek(c) {
 		if (ws && ws.readyState === WebSocket.OPEN) {
 			ws.send("{'lv':true}");
 		} else {
-			ws = new WebSocket((window.location.protocol == "https:"?"wss":"ws")+"://"+document.location.host+"/ws");
+			let l = window.location;
+			let pathn = l.pathname;
+			let paths = pathn.slice(1,pathn.endsWith('/')?-1:undefined).split("/");
+			let url = l.origin.replace("http","ws");
+			if (paths.length > 1) {
+				url +=  "/" + paths[0];
+			}
+			ws = new WebSocket(url+"/ws");
 			ws.onopen = ()=>{
 				ws.send("{'lv':true}");
 			}
 		}
 		ws.binaryType = "arraybuffer";
 		ws.addEventListener('message',(e)=>{
-			// function processWSData(e) {
 			try {
 				if (toString.call(e.data) === '[object ArrayBuffer]') {
-					let leds = new Uint8Array(e.data);
+					let leds = new Uint8Array(event.data);
 					if (leds[0] != 76 || leds[1] != 2 || !ctx) return; //'L', set in ws.cpp
 					let mW = leds[2]; // matrix width
 					let mH = leds[3]; // matrix height
 					let pPL = Math.min(c.width / mW, c.height / mH); // pixels per LED (width of circle)
 					let lOf = Math.floor((c.width - pPL*mW)/2); //left offeset (to center matrix)
-					var i = 4; //same offset as in ws.cpp
+					var i = 4;
 					ctx.clearRect(0, 0, c.width, c.height); //WLEDMM
 					function colorAmp(color) {
 						if (color == 0) return 0;

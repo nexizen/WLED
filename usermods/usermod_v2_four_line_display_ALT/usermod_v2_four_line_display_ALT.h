@@ -7,6 +7,7 @@
 //#define WIRE_INTERFACES_COUNT 2 // experimental - tell U8x8Lib that there is a second Wire unit
 
 #include "wled.h"
+#undef U8X8_NO_HW_I2C // borrowed from WLEDMM: we do want I2C hardware drivers - if possible
 #include <U8x8lib.h> // from https://github.com/olikraus/u8g2/
 #include "4LD_wled_fonts.c"
 
@@ -34,6 +35,11 @@
 // REQUIREMENT: "lib_deps" within platformio.ini / platformio_override.ini
 // REQUIREMENT: olikraus/U8g2@ ^2.34.15 (the version already in platformio.ini is fine)
 //
+// If display does not work or looks corrupted check the
+// constructor reference:
+// https://github.com/olikraus/u8g2/wiki/u8x8setupcpp
+// or check the gallery:
+// https://github.com/olikraus/u8g2/wiki/gallery
 
 //The SCL and SDA pins are defined here. 
 #ifndef FLD_PIN_SCL
@@ -121,7 +127,7 @@ class FourLineDisplayUsermod : public Usermod {
     U8X8 *u8x8 = nullptr;           // pointer to U8X8 display object
 
     #ifndef FLD_SPI_DEFAULT
-    int8_t ioPin[5] = {FLD_PIN_SCL, FLD_PIN_SDA, -1, -1, -1};        // I2C pins: SCL, SDA
+    int8_t ioPin[3] = {-1, -1, -1}; // I2C pins: SCL, SDA
     uint32_t ioFrequency = 400000;  // in Hz (minimum is 100000, baseline is 400000 and maximum should be 3400000)
     #else
     int8_t ioPin[5] = {FLD_PIN_CLOCKSPI, FLD_PIN_MOSISPI, FLD_PIN_CS, FLD_PIN_DC, FLD_PIN_RESET}; // SPI pins: CLK, MOSI, CS, DC, RST
@@ -339,27 +345,19 @@ class FourLineDisplayUsermod : public Usermod {
      * Creating an "u" object allows you to add custom key/value pairs to the Info section of the WLED web UI.
      * Below it is shown how this could be used for e.g. a light sensor
      */
-    //void addToJsonInfo(JsonObject& root) {
-      //JsonObject user = root["u"];
-      //if (user.isNull()) user = root.createNestedObject("u");
-      //JsonArray data = user.createNestedArray(F("4LineDisplay"));
-      //data.add(F("Loaded."));
-    //}
+    //void addToJsonInfo(JsonObject& root);
 
     /*
      * addToJsonState() can be used to add custom entries to the /json/state part of the JSON API (state object).
      * Values in the state object may be modified by connected clients
      */
-    //void addToJsonState(JsonObject& root) {
-    //}
+    //void addToJsonState(JsonObject& root);
 
     /*
      * readFromJsonState() can be used to receive data clients send to the /json/state part of the JSON API (state object).
      * Values in the state object may be modified by connected clients
      */
-    //void readFromJsonState(JsonObject& root) {
-    //  if (!initDone) return;  // prevent crash on boot applyPreset()
-    //}
+    //void readFromJsonState(JsonObject& root);
 
     void appendConfigData();
 

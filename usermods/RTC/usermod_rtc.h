@@ -45,8 +45,8 @@ class RTCUsermod : public Usermod {
     }
 
     void loop() {
-      if (strip.isUpdating()) return;
-      if (!disabled && toki.isTick()) {
+      if (disabled || strip.isUpdating()) return;
+      if (toki.isTick()) {
         time_t t = toki.second();
 
         if (abs(t - RTC.get())> RTC_DELTA) {            // WLEDMM only consider time diffs > 2 seconds

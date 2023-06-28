@@ -16,7 +16,6 @@ class ShtUsermod : public Usermod
   private:
     //bool enabled = false; // Is usermod enabled or not //WLEDMM use public attribute of class UserMod
     bool firstRunDone = false; // Remembers if the first config load run had been done
-    bool pinAllocDone = true; // Remembers if we have allocated pins
     bool initDone = false; // Remembers if the mod has been completely initialised
     bool haMqttDiscovery = false; // Is MQTT discovery enabled or not
     bool haMqttDiscoveryDone = false; // Remembers if we already published the HA discovery topics

@@ -1,5 +1,5 @@
 //page js
-var loc = false, locip;
+var loc = false, locip, locproto = "http:";
 var isOn = false, nlA = false, isLv = false, isInfo = false, isNodes = false, syncSend = false, syncTglRecv = true;
 var hasWhite = false, hasRGB = false, hasCCT = false;
 var nlDur = 60, nlTar = 0;
@@ -22,7 +22,7 @@ var pN = "", pI = 0, pNum = 0;
 var pmt = 1, pmtLS = 0, pmtLast = 0;
 var lastinfo = {};
 var isM = false, mw = 0, mh=0;
-var ws, cpick, ranges;
+var ws, cpick, ranges, wsRpt=0;
 var cfg = {
 	theme:{base:"dark", bg:{url:""}, alpha:{bg:0.6,tab:0.8}, color:{bg:""}},
 	comp :{colors:{picker: true, rgb: false, quick: true, hex: false},
@@ -198,20 +198,38 @@ function loadSkinCSS(cId)
 		l.id   = cId;
 		l.rel  = 'stylesheet';
 		l.type = 'text/css';
-		l.href = (loc?`http://${locip}`:'.') + '/skin.css';
+		l.href = getURL('/skin.css');
 		l.media = 'all';
 		h.appendChild(l);
 	}
 }
 
+function getURL(path) {
+	return (loc ? locproto + "//" + locip : "") + path;
+}
 function onLoad()
 {
-	if (window.location.protocol == "file:") {
+	let l = window.location;
+	if (l.protocol == "file:") {
 		loc = true;
 		locip = localStorage.getItem('locIp');
 		if (!locip) {
 			locip = prompt("File Mode. Please enter WLED IP!");
 			localStorage.setItem('locIp', locip);
+		}
+	} else {
+		// detect reverse proxy and/or HTTPS
+		let pathn = l.pathname;
+		let paths = pathn.slice(1,pathn.endsWith('/')?-1:undefined).split("/");
+		//if (paths[0]==="sliders") paths.shift();
+		//while (paths[0]==="") paths.shift();
+		locproto = l.protocol;
+		locip = l.hostname + (l.port ? ":" + l.port : "");
+		if (paths.length > 0 && paths[0]!=="") {
+			loc = true;
+			locip +=  "/" + paths[0];
+		} else if (locproto==="https:") {
+			loc = true;
 		}
 	}
 	var sett = localStorage.getItem('wledUiCfg');
@@ -222,7 +240,7 @@ function onLoad()
 	if (localStorage.getItem('pcm') == "true" || (!/Mobi/.test(navigator.userAgent) && localStorage.getItem('pcm') == null)) togglePcMode(true);
 	applyCfg();
 	if (cfg.comp.hdays) { //load custom holiday list
-		fetch((loc?`http://${locip}`:'.') + "/holidays.json", {	// may be loaded from external source
+		fetch(getURL("/holidays.json"), {	// may be loaded from external source
 			method: 'get'
 		})
 		.then((res)=>{
@@ -438,9 +456,7 @@ function loadPresets(callback = null)
 	// afterwards
 	if (!callback && pmt == pmtLast) return;
 
-	var url = (loc?`http://${locip}`:'') + '/presets.json';
-
-	fetch(url, {
+	fetch(getURL('/presets.json'), {
 		method: 'get'
 	})
 	.then(res => {
@@ -464,9 +480,7 @@ function loadPresets(callback = null)
 
 function loadPalettes(callback = null)
 {
-	var url = (loc?`http://${locip}`:'') + '/json/palettes';
-
-	fetch(url, {
+	fetch(getURL('/json/palettes'), {
 		method: 'get'
 	})
 	.then((res)=>{
@@ -488,9 +502,7 @@ function loadPalettes(callback = null)
 
 function loadFX(callback = null)
 {
-	var url = (loc?`http://${locip}`:'') + '/json/effects';
-
-	fetch(url, {
+	fetch(getURL('/json/effects'), {
 		method: 'get'
 	})
 	.then((res)=>{
@@ -502,6 +514,7 @@ function loadFX(callback = null)
 		populateEffects();
 	})
 	.catch((e)=>{
+		//setTimeout(loadFX, 250); // retry
 		showToast(e, true);
 	})
 	.finally(()=>{
@@ -512,9 +525,7 @@ function loadFX(callback = null)
 
 function loadFXData(callback = null)
 {
-	var url = (loc?`http://${locip}`:'') + '/json/fxdata';
-
-	fetch(url, {
+	fetch(getURL('/json/fxdata'), {
 		method: 'get'
 	})
 	.then((res)=>{
@@ -529,6 +540,7 @@ function loadFXData(callback = null)
 	})
 	.catch((e)=>{
 		fxdata = [];
+		//setTimeout(loadFXData, 250); // retry
 		showToast(e, true);
 	})
 	.finally(()=>{
@@ -804,7 +816,7 @@ function populateSegments(s)
 				(cfg.comp.segpwr ? segp : '') +
 				`<div class="segin" id="seg${i}in">`+
 					`<input id="seg${i}fx" value="${inst.fx}" type="hidden"/>` + // <!--WLEDMM-->
-					`<input type="text" class="ptxt" id="seg${i}t" autocomplete="off" maxlength=32 value="${inst.n?inst.n:""}" placeholder="Enter name..."/>`+
+					`<input type="text" class="ptxt" id="seg${i}t" autocomplete="off" maxlength=${li.arch=="esp8266"?32:64} value="${inst.n?inst.n:""}" placeholder="Enter name..."/>`+
 					`<table class="infot segt">`+
 					`<tr>`+
 						`<td>${isMSeg?'Start X':'Start LED'}</td>`+
@@ -1173,8 +1185,7 @@ function populateNodes(i,n)
 
 function loadNodes()
 {
-	var url = (loc?`http://${locip}`:'') + '/json/nodes';
-	fetch(url, {
+	fetch(getURL('/json/nodes'), {
 		method: 'get'
 	})
 	.then((res)=>{
@@ -1619,6 +1630,7 @@ function updateSelectedFx()
 		// hide non-0D effects if segment only has 1 pixel (0D)
 		var fxs = parent.querySelectorAll('.lstI');
 		for (const fx of fxs) {
+			if (!fx.dataset.opt) continue;
 			let opts = fx.dataset.opt.split(";");
 			if (fx.dataset.id>0) {
 				if (segLmax==0) fx.classList.add('hide'); // none of the segments selected (hide all effects)
@@ -1660,7 +1672,8 @@ function cmpP(a, b)
 
 function makeWS() {
 	if (ws || lastinfo.ws < 0) return;
-	ws = new WebSocket((window.location.protocol == "https:"?"wss":"ws")+'://'+(loc?locip:window.location.hostname)+'/ws');
+	let url = loc ? getURL('/ws').replace("http","ws") : "ws://"+window.location.hostname+"/ws";
+	ws = new WebSocket(url);
 	ws.binaryType = "arraybuffer";
 	ws.onmessage = (e)=>{
 		if (e.data instanceof ArrayBuffer) return; // liveview packet
@@ -1687,11 +1700,12 @@ function makeWS() {
 	};
 	ws.onclose = (e)=>{
 		gId('connind').style.backgroundColor = "var(--c-r)";
-		setTimeout(makeWS,1500); // retry WS connection
+		if (wsRpt++ < 5) setTimeout(makeWS,1500); // retry WS connection
 		ws = null;
 	}
 	ws.onopen = (e)=>{
 		//ws.send("{'v':true}"); // unnecessary (https://github.com/Aircoookie/WLED/blob/master/wled00/ws.cpp#L18)
+		wsRpt = 0;
 		reqsLegal = true;
 	}
 }
@@ -1942,7 +1956,6 @@ function requestJson(command=null)
 	if (command && !reqsLegal) return; // stop post requests from chrome onchange event on page restore
 	if (!jsonTimeout) jsonTimeout = setTimeout(()=>{if (ws) ws.close(); ws=null; showErrorToast()}, 3000);
 	var req = null;
-	var url = (loc?`http://${locip}`:'') + '/json/si';
 	var useWs = (ws && ws.readyState === WebSocket.OPEN);
 	var type = command ? 'post':'get';
 	if (command) {
@@ -1964,8 +1977,7 @@ function requestJson(command=null)
 		return;
 	}
 
-	// console.log("requestJson url fetch", url, type); //WLEDMM Debug
-	fetch(url, {
+	fetch(getURL('/json/si'), {
 		method: type,
 		headers: {
 			"Content-type": "application/json; charset=UTF-8"
@@ -2004,6 +2016,7 @@ function requestJson(command=null)
 		//load presets and open websocket sequentially
 		if (!pJson || isEmpty(pJson)) setTimeout(()=>{
 			loadPresets(()=>{
+				wsRpt = 0;
 				if (!(ws && ws.readyState === WebSocket.OPEN)) makeWS();
 			});
 		},25);
@@ -2084,10 +2097,10 @@ function bigPeek(doCreate)
 	let lvID = "liveview2D"
 	if (doCreate) {
 		var cn = '<iframe id="liveview2D" src="about:blank" onload="this.contentWindow.document.body.onclick=function(){bigPeek(false);}"></iframe>';
-		gId('kliveview2D').innerHTML = cn;
+		gId('klv2D').innerHTML = cn;
 	}
 
-	gId('mliveview2D').style.transform = (doCreate) ? "translateY(0px)":"translateY(100%)";
+	gId('mlv2D').style.transform = (doCreate) ? "translateY(0px)":"translateY(100%)";
 
 	gId(lvID).style.display = (doCreate) ? "block":"none";
 	var url = (loc?`http://${locip}`:'') + "/" + lvID;
@@ -2982,7 +2995,7 @@ function cnfReset()
 		bt.innerHTML = "Confirm Reboot";
 		cnfr = true; return;
 	}
-	window.location.href = "/reset";
+	window.location.href = getURL("/reset");
 }
 
 var cnfrS = false;
@@ -3172,9 +3185,7 @@ function loadPalettesData(callback = null)
 
 function getPalettesData(page, callback)
 {
-	var url = (loc?`http://${locip}`:'') + `/json/palx?page=${page}`;
-
-	fetch(url, {
+	fetch(getURL(`/json/palx?page=${page}`), {
 		method: 'get',
 		headers: {
 			"Content-type": "application/json; charset=UTF-8"

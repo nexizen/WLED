@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Wire.h>
 #include "wled.h"
 #include <driver/i2s.h>
 #include <driver/adc.h>
@@ -417,6 +416,7 @@ class I2SSource : public AudioSource {
 */
 class ES7243 : public I2SSource {
   private:
+    //WLEDMM:
     // I2C initialization functions for ES7243
     void _es7243I2cBegin() {
       bool i2c_initialized = Wire.begin(pin_ES7243_SDA, pin_ES7243_SCL, 100000U);
@@ -426,12 +426,10 @@ class ES7243 : public I2SSource {
     }
 
     void _es7243I2cWrite(uint8_t reg, uint8_t val) {
-#ifndef ES7243_ADDR
-      Wire.beginTransmission(0x13);
-      #define ES7243_ADDR 0x13   // default address
-#else
+      #ifndef ES7243_ADDR
+        #define ES7243_ADDR 0x13   // default address
+      #endif
       Wire.beginTransmission(ES7243_ADDR);
-#endif
       Wire.write((uint8_t)reg);
       Wire.write((uint8_t)val);
       uint8_t i2cErr = Wire.endTransmission();  // i2cErr == 0 means OK
@@ -441,7 +439,6 @@ class ES7243 : public I2SSource {
     }
 
     void _es7243InitAdc() {
-      _es7243I2cBegin();
       _es7243I2cWrite(0x00, 0x01);
       _es7243I2cWrite(0x06, 0x00);
       _es7243I2cWrite(0x05, 0x1B);
@@ -456,6 +453,7 @@ public:
       _config.channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT;
     };
 
+    //WLEDMM
     void initialize(int8_t sdaPin, int8_t sclPin, int8_t i2swsPin, int8_t i2ssdPin, int8_t i2sckPin, int8_t mclkPin) {
       // check that pins are valid
       if ((sdaPin < 0) || (sclPin < 0)) {
@@ -490,7 +488,6 @@ public:
       pinManager.deallocateMultiplePins(es7243Pins, 2, PinOwner::HW_I2C);
       I2SSource::deinitialize();
     }
-
   private:
     int8_t pin_ES7243_SDA;
     int8_t pin_ES7243_SCL;

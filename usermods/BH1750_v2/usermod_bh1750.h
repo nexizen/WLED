@@ -229,7 +229,9 @@ public:
       user = root.createNestedObject(F("u"));
 
     JsonArray lux_json = user.createNestedArray(F("Luminance"));
-    if (!sensorFound) {
+    if (!enabled) {
+      lux_json.add(F("disabled"));
+    } else if (!sensorFound) {
         // if no sensor 
         lux_json.add(F("BH1750 "));
         lux_json.add(F("Not Found"));
@@ -303,8 +305,6 @@ public:
 
     DEBUG_PRINT(FPSTR(_name));
     if (!initDone) {
-      // first run: reading from cfg.json
-      for (byte i=0; i<2; i++) ioPin[i] = newPin[i];
       DEBUG_PRINTLN(F(" config loaded."));
     } else {
       DEBUG_PRINTLN(F(" config (re)loaded."));
