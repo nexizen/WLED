@@ -196,6 +196,7 @@ uint32_t WS2812FX::getPixelColorXY(uint16_t x, uint16_t y) {
 uint16_t IRAM_ATTR_YN Segment::XY(uint16_t x, uint16_t y) { //WLEDMM: IRAM_ATTR conditionaly
   uint16_t width  = virtualWidth();   // segment width in logical pixels
   uint16_t height = virtualHeight();  // segment height in logical pixels
+  if ((width == 0) || (height == 0)) return 0; // softhack007 avoid div/0
   return (x%width) + (y%height) * width;
 }
 

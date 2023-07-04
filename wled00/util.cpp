@@ -508,7 +508,7 @@ um_data_t* simulateSound(uint8_t simulationId)
   }
 
   samplePeak    = random8() > 250;
-  FFT_MajorPeak = 21 + (volumeSmth*volumeSmth) / 8.0f; // WLEDMM 21hz...8200hz
+  FFT_MajorPeak = 21 + (volumeSmth*volumeSmth) / 8.0f; // walk thru full range of 21hz...8200hz
   maxVol        = 31;  // this gets feedback fro UI
   binNum        = 8;   // this gets feedback fro UI
   volumeRaw = volumeSmth;

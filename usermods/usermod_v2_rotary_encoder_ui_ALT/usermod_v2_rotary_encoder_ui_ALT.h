@@ -492,6 +492,7 @@ void RotaryEncoderUIUsermod::loop()
 {
   if (!enabled) return;
   unsigned long currentTime = millis(); // get the current elapsed time
+  if (strip.isUpdating() && ((currentTime - loopTime) < ENCODER_MAX_DELAY_MS)) return;  // be nice, but not too nice
 
   if (strip.isUpdating() && (currentTime - loopTime < 4)) return;  // WLEDMM: be nice, but not too nice
 
