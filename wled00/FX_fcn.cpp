@@ -104,9 +104,8 @@ Segment::Segment(const Segment &orig) {
   if (orig.name) { name = new char[strlen(orig.name)+1]; if (name) strcpy(name, orig.name); }
   if (orig.data) { if (allocateData(orig._dataLen)) memcpy(data, orig.data, orig._dataLen); }
   if (orig._t)   { _t = new Transition(orig._t->_dur, orig._t->_briT, orig._t->_cctT, orig._t->_colorT); }
-  if (orig.ledsrgb && !Segment::_globalLeds) { allocLeds(); if (ledsrgb) memcpy(ledsrgb, orig.ledsrgb, sizeof(CRGB)*length()); }
+  if (orig.ledsrgb && !Segment::_globalLeds && length() > 0) { allocLeds(); if (ledsrgb) memcpy(ledsrgb, orig.ledsrgb, sizeof(CRGB)*length()); }
   jMap = nullptr; //WLEDMM jMap
-  if (orig.leds && !Segment::_globalLeds && length() > 0) { leds = (CRGB*)malloc(sizeof(CRGB)*length()); if (leds) memcpy(leds, orig.leds, sizeof(CRGB)*length()); }
 }
 
 //WLEDMM: recreate ledsrgb if more space needed (will not free ledsrgb!)
@@ -126,12 +125,11 @@ void Segment::allocLeds() {
 Segment::Segment(Segment &&orig) noexcept {
   USER_PRINTLN(F("-- Move segment constructor --"));
   memcpy((void*)this, (void*)&orig, sizeof(Segment));
-  orig.leds = nullptr;
+  orig.ledsrgb = nullptr; //WLEDMM: do not free as moved to here (constructor so there where no leds)
   orig.name = nullptr;
   orig.data = nullptr;
   orig._dataLen = 0;
   orig._t   = nullptr;
-  orig.ledsrgb = nullptr; //WLEDMM: do not free as moved to here (constructor so there where no leds)
   orig.jMap = nullptr; //WLEDMM jMap
 }
 
@@ -159,9 +157,8 @@ Segment& Segment::operator= (const Segment &orig) {
     if (orig.name) { name = new char[strlen(orig.name)+1]; if (name) strcpy(name, orig.name); }
     if (orig.data) { if (allocateData(orig._dataLen)) memcpy(data, orig.data, orig._dataLen); }
     if (orig._t)   { _t = new Transition(orig._t->_dur, orig._t->_briT, orig._t->_cctT, orig._t->_colorT); }
-    if (orig.ledsrgb && !Segment::_globalLeds) { allocLeds(); if (ledsrgb) memcpy(ledsrgb, orig.ledsrgb, sizeof(CRGB)*length()); }
+    if (orig.ledsrgb && !Segment::_globalLeds && length() > 0) { allocLeds(); if (ledsrgb) memcpy(ledsrgb, orig.ledsrgb, sizeof(CRGB)*length()); }
     jMap = nullptr; //WLEDMM jMap
-    if (orig.leds && !Segment::_globalLeds && length() > 0) { leds = (CRGB*)malloc(sizeof(CRGB)*length()); if (leds) memcpy(leds, orig.leds, sizeof(CRGB)*length()); }
   }
   return *this;
 }

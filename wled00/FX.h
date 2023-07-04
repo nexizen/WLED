@@ -503,7 +503,7 @@ typedef struct Segment {
       strip_wait_until_idle("~Segment()");
       #endif
 
-      if (!Segment::_globalLeds && leds) { free(leds); leds = nullptr;} // reset to nullptr, to avoid race conditions
+      if (!Segment::_globalLeds && ledsrgb) { free(ledsrgb); ledsrgb = nullptr;} // reset to nullptr, to avoid race conditions
       if (name) delete[] name;
       if (_t) delete _t;
       deallocateData();
